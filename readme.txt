@@ -20,3 +20,6 @@ the Public and Private keys are yours.
 
 to input code make sure its formatted correctly with tabs instead of spaces.
 make sure that the data you want is inputed into a output dictionary.
+
+the contract.py is just a sample contract, copy and paste it into the contracts text box
+exclude the header (#!/usr/bin/python3)
