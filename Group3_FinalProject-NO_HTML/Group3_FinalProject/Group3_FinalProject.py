@@ -54,7 +54,6 @@ class Blockchain:
             }
 
             contract['gas'] = len(contract['contract_code']) * 0.01
-            private_key = request.args.get('private_key', default = '', type = str)
             assert contract['public_key'] and contract['contract_code'] and contract['contract_name']
             #assert private_key == self.wallets[contract['public_key']]['private_key']
             assert contract['gas'] > 0 # and gas <= self.wallets[contract['public_key']]['balance']
