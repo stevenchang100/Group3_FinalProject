@@ -34,6 +34,43 @@ class Blockchain:
         self.wallets[wallet['public_key']] = wallet
         return wallet
 
+#This function creates the contracts and sends them into the conpool
+    def create_contract(self, keyPublic, keyPrivate, keyContract, keyName, gas):
+
+        try:
+            contract = {
+                'cTime': int(time.time()),
+                'public_key' : binascii.b2a_hex(os.urandom(8)).decode('ascii'),
+                'admin': keyPublic,
+                'contract_code': keyContract,
+                'states' : {},
+                'contract_name': keyName,
+                'gas': gas,
+                'data': {}
+            }
+
+            private_key = keyPrivate
+            assert contract['public_key'] and contract['contract_code'] and contract['contract_name']
+            #assert private_key == self.wallets[contract['public_key']]['private_key']
+            assert gas > 0 # and gas <= self.wallets[contract['public_key']]['balance']
+
+        except:
+            return False
+
+        # contract_id = self.hash_transaction(contract)
+        # self.conpool[contract_id] = contract
+
+        self.wallets[contract['public_key']] = contract # contracts and wallets stored in same dict, to be found using public keys
+        return contract['public_key']
+        
+    def call_contract(self, contract_public_key):
+        # take in public key of accessor, desired contract public key
+        # takes in any other params for the code
+        # pass the code to conpool for running
+        self.conpool[contract_public_key] = self.wallets[contract_public_key]
+        # runs the code??? how???
+        # output to the block once mined
+        return True
 
     def get_clean_wallets(self):
         clean_wallets = copy.deepcopy(blockchain.wallets)
@@ -121,7 +158,7 @@ class Blockchain:
 
 
     def check_merkle_root(self, block):
-        if calculate_merkle_root(block['transactions']) == block['header']['merkle_root']:
+        if self.calculate_merkle_root(block['transactions']) == block['header']['merkle_root']:
             return True
         else:
             return False
@@ -325,32 +362,6 @@ class Blockchain:
 
         return message_id
 
-#This function creates the contracts and sends them into the conpool
-    def create_contract(self, keyPublic, keyPrivate, keyContract, keyName, gas):
-
-        try:
-            contract = {
-                'cTime': int(time.time()),
-                'public_key': keyPublic,
-                'contract_code': keyContract,
-                'contract_name': keyName,
-                'gas': gas,
-                'Data': {}
-            }
-
-            private_key = keyPrivate
-            assert contract['public_key'] and contract['contract_code'] and contract['contract_name']
-            assert private_key == self.wallets[contract['public_key']]['private_key']
-            assert gas > 0 and gas <= self.wallets[contract['public_key']]['balance']
-
-        except:
-            return False
-
-        contract_id = self.hash_transaction(contract)
-        self.conpool[contract_id] = contract
-
-        return contract_id
-
 #This function moves all of the current messages and sends them into the block current block
 #it also subtracts the gas price from the senders wallet if they have enough
     def move_message_from_mespool(self):
@@ -480,8 +491,10 @@ def create_contract():
     else:
         return Response(json.dumps({'Error': 'Invalid Contract'}), status=400, mimetype='application/json')
 
-
-
+@app.route('/call_contract', methods = ['GET'])
+def call_contract():
+    contract_address = request.args.get('contract_address', default = 0, type = str)
+    blockchain.call_contract(contract_address)
 
 
 
