@@ -18,6 +18,7 @@ class Blockchain:
         self.difficulty_target = 4
         self.wallets = {}
         self.mempool = {}
+        #used to hold the messages and contracts before they are processed into the block
         self.mespool = {}
         self.conpool = {}
 
@@ -161,6 +162,7 @@ class Blockchain:
 
         block = self.create_block()
         block['transactions'] = self.choose_transactions_from_mempool()
+        #these call the move functions to add the messages and contracts into the block
         block['messages'] = self.move_message_from_mespool()
         block['contracts'] = self.move_contract_from_conpool()
         block['header']['merkle_root'] = self.calculate_merkle_root(list(block['transactions'].keys()))
@@ -195,6 +197,8 @@ class Blockchain:
         return True
 
 #My ATTEMPTS_____________________________________________________________________________________________
+
+#This function finds Transactions that are on the blockchain for a specific account and returns them
     def find_transactions(self, keyTo):
         
         keyToTransactions = {}
@@ -212,6 +216,7 @@ class Blockchain:
 
         return keyToTransactions
 
+#This function finds all messages for a certain account on the blockchain and returns them
     def find_messages(self, keyTo):
         i = 1
         keyToMessages = {}
@@ -231,6 +236,7 @@ class Blockchain:
 
         return keyToMessages
 
+#This function finds the output of a Contract and returns it to the proper account
     def find_contract_output(self,keyTo):
         i = 1
         keyToContracts = {}
@@ -249,6 +255,7 @@ class Blockchain:
 
         return keyToContracts
 
+#This function is used to login to a wallet account page
     def login(self, request):
         try:
             public_key = request.args.get('public_key', default = '', type = str)
@@ -262,7 +269,7 @@ class Blockchain:
         
         return public_key
 
-
+#This function creates Transactions for the login page and adds them to the mempool 
     def create_transaction_login(self, keyFrom, keyTo, keyAmount, keyPrivate):
         
         try:
@@ -289,6 +296,7 @@ class Blockchain:
         
         return transaction_id
 
+#This function creates messages and sends them into mespool
     def send_message(self, keyFrom, keyTo, keyMessage, keyPrivate, gas):
 
         try:
@@ -317,54 +325,7 @@ class Blockchain:
 
         return message_id
 
-    def move_message_from_mespool(self):
-
-        processed_messages = {}
-
-        while len(self.mespool) > 0:
-
-            message_id = list(self.mespool)[len(self.mespool) - 1]
-            message = copy.deepcopy(self.mespool[message_id])
-
-            if message['gas'] <= self.wallets[message['mFrom']]['balance']:
-
-                self.wallets[message['mFrom']]['balance'] -= message['gas']
-
-                processed_messages[message_id] = message
-            
-            del self.mespool[message_id]
-
-        return processed_messages
-
-    def move_contract_from_conpool(self):
-
-        processed_contracts = {}
-
-        while len(self.conpool) > 0:
-
-            contract_id = list(self.conpool)[len(self.conpool) - 1]
-            contract = copy.deepcopy(self.conpool[contract_id])
-
-
-            
-
-            if contract['gas'] <= self.wallets[contract['public_key']]['balance']:
-
-                self.wallets[contract['public_key']]['balance'] -= contract['gas']
-
-                
-                namespace = {}
-                globalsParameter = {'__builtins__' : None}
-
-                exec(contract['contract_code'], globals(), namespace)
-                contract['Data'] = namespace['output']
-                del contract['contract_code']
-                processed_contracts[contract_id] = contract 
-
-            del self.conpool[contract_id]
-
-        return processed_contracts
-
+#This function creates the contracts and sends them into the conpool
     def create_contract(self, keyPublic, keyPrivate, keyContract, keyName, gas):
 
         try:
@@ -390,6 +351,61 @@ class Blockchain:
 
         return contract_id
 
+#This function moves all of the current messages and sends them into the block current block
+#it also subtracts the gas price from the senders wallet if they have enough
+    def move_message_from_mespool(self):
+
+        processed_messages = {}
+
+        while len(self.mespool) > 0:
+
+            message_id = list(self.mespool)[len(self.mespool) - 1]
+            message = copy.deepcopy(self.mespool[message_id])
+
+            if message['gas'] <= self.wallets[message['mFrom']]['balance']:
+
+                self.wallets[message['mFrom']]['balance'] -= message['gas']
+
+                processed_messages[message_id] = message
+            
+            del self.mespool[message_id]
+
+        return processed_messages
+
+#This function moves the contracts from the conpool into the current block and runs the code for them
+#it also subtracts the gas from the users wallet
+    def move_contract_from_conpool(self):
+
+        processed_contracts = {}
+
+        while len(self.conpool) > 0:
+
+            contract_id = list(self.conpool)[len(self.conpool) - 1]
+            contract = copy.deepcopy(self.conpool[contract_id])
+
+
+            if contract['gas'] <= self.wallets[contract['public_key']]['balance']:
+
+                self.wallets[contract['public_key']]['balance'] -= contract['gas']
+
+                #namespace is used to collect the output dictionary from the executed code
+                namespace = {}
+                globalsParameter = {'__builtins__' : None}
+                #runs the code of the contract
+                exec(contract['contract_code'], globals(), namespace)
+                contract['Data'] = namespace['output']
+
+                #deletes the code from the contract afterwards in order to clean up the blocks
+                del contract['contract_code']
+                processed_contracts[contract_id] = contract 
+
+            del self.conpool[contract_id]
+
+        return processed_contracts
+
+
+#This is the login page
+#It calls the information of the current account and then renders a HTML page that will display the relevant information about their account
 @app.route('/login', methods = ['GET'])
 def login():
     
@@ -411,7 +427,8 @@ def login():
 
 
 
-
+#This is the url used to create transactions
+#it takes input from the HTML page and sends it into the create_transaction_login function to create transactions
 @app.route('/create_transaction_login', methods = ['POST'])
 def create_transaction_login():
 
@@ -427,6 +444,8 @@ def create_transaction_login():
     else:
         return Response(json.dumps({'Error': 'Invalid transaction'}), status=400, mimetype='application/json')
 
+#This is the url used to send messages
+#It takes input from the HTML page and sends it into the send_message function to create messages
 @app.route('/send_message', methods = ['POST'])
 def send_message():
 
@@ -443,6 +462,8 @@ def send_message():
     else:
         return Response(json.dumps({'Error': 'Invalid Message'}), status=400, mimetype='application/json')
 
+#This is the url used to create Contracts
+#It takes input from the HTML page and sends it into the create_contract function to create Contracts
 @app.route('/create_contract', methods = ['POST'])
 def create_contract():
     keyPublic = request.form['public_Key']
