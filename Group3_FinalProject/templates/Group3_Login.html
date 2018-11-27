@@ -6,6 +6,7 @@
 		var Balance = {{Balance}}
 		var Transaction = {{Transaction}}
 		var Messages = {{Messages}}
+		var Contracts = {{Contracts}}
 
 
 	</script>
@@ -37,7 +38,10 @@
 	</form>
 
 	<h3>Messages Recieved</h3>
+
+	{% autoescape false %}
 	<p>{{Messages}}</p>
+	{% endautoescape %}
 
 	<h2>Contracts</h2>
 	<form action="{{ url_for('create_contract') }}" id="contractForm" method="post">
@@ -46,11 +50,21 @@
     Contract Name: <input type="text" name="Name"><br>
     <input type="submit" value="submit">
 	</form>
-	<textarea rows="30" cols="100" name="Contract" form="contractForm">Enter the Contract here...</textarea>
+	<textarea rows="30" cols="100" name="Contract" form="contractForm">Contracts output must be formatted into output dictionary
+	example: 
+		output = {
+		'info': your info
+	}</textarea>
+
+	<h3>Contract Outputs</h3>
+
+	{% autoescape false %}
+	<p>{{Contracts}}</p>
+	{% endautoescape %}
 
 	
 
 	</body>
 
-	
+
 </html>

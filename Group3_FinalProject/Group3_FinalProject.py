@@ -213,7 +213,7 @@ class Blockchain:
         return keyToTransactions
 
     def find_messages(self, keyTo):
-        i = 0
+        i = 1
         keyToMessages = {}
 
         for block_number in reversed(range(len(self.chain))):
@@ -225,13 +225,29 @@ class Blockchain:
                 if current_block['messages'][key]['mTo'] == keyTo:
 
                     keyMessages = copy.deepcopy(current_block['messages'][key])
-
+                    del keyMessages['gas']
                     keyToMessages[i] = keyMessages
                     i = i + 1
 
-                        
-
         return keyToMessages
+
+    def find_contract_output(self,keyTo):
+        i = 1
+        keyToContracts = {}
+        for block_number in reversed(range(len(self.chain))):
+
+            current_block = self.chain[block_number]
+
+            for key in current_block['contracts'].keys():
+
+                if current_block['contracts'][key]['public_key'] == keyTo:
+
+                    keyContracts = copy.deepcopy(current_block['contracts'][key])
+                    del keyContracts['gas']
+                    keyToContracts[i] = keyContracts
+                    i = i + 1
+
+        return keyToContracts
 
     def login(self, request):
         try:
@@ -342,7 +358,7 @@ class Blockchain:
 
                 exec(contract['contract_code'], globals(), namespace)
                 contract['Data'] = namespace['output']
-
+                del contract['contract_code']
                 processed_contracts[contract_id] = contract 
 
             del self.conpool[contract_id]
@@ -382,12 +398,13 @@ def login():
         walletBalance = blockchain.wallets[login_success]['balance']
         keyTransactions = blockchain.find_transactions(login_success)
         keyMessages = blockchain.find_messages(login_success)
+        keyContracts = blockchain.find_contract_output(login_success)
 
     except:
         pass
 
     if login_success:
-        return render_template('Group3_Login.html', public_key=login_success, Balance=walletBalance, Transaction=json.dumps(keyTransactions), Messages=json.dumps(keyMessages))
+        return render_template('Group3_Login.html', public_key=login_success, Balance=walletBalance, Transaction=json.dumps(keyTransactions), Messages=json.dumps(keyMessages).replace('}','}<br>'), Contracts=json.dumps(keyContracts).replace('}','}<br>'))
 
     else:
         return Response(json.dumps({'Error': 'Invalid LOGIN'}), status=400, mimetype='application/json')
