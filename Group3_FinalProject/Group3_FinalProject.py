@@ -18,6 +18,8 @@ class Blockchain:
         self.difficulty_target = 4
         self.wallets = {}
         self.mempool = {}
+        self.mespool = {}
+        self.conpool = {}
 
 #NEW-----------------------------------------------------------------------------------------------------
 
@@ -147,6 +149,8 @@ class Blockchain:
                 'merkle_root': None
             },
             'transactions' : {},
+            'messages' : {},
+            'contracts' : {},
             'hash' : None
         }
 
@@ -157,6 +161,8 @@ class Blockchain:
 
         block = self.create_block()
         block['transactions'] = self.choose_transactions_from_mempool()
+        block['messages'] = self.move_message_from_mespool()
+        block['contracts'] = self.move_contract_from_conpool()
         block['header']['merkle_root'] = self.calculate_merkle_root(list(block['transactions'].keys()))
 
         while True:
@@ -190,23 +196,40 @@ class Blockchain:
 
 #My ATTEMPTS_____________________________________________________________________________________________
     def find_transactions(self, keyTo):
-        i = 0
+        
         keyToTransactions = {}
 
         for block_number in reversed(range(len(self.chain))):
 
             current_block = self.chain[block_number]
 
-            for key, value in current_block['transactions']['transaction_id'].items():
+            for key in current_block['transactions'].keys():
 
-                if current_block['transactions'][value]['to'] == keyTo:
+                if current_block['transactions'][key]['to'] == keyTo:
 
-                    keyTransactions = deepcopy.current_block['transactions'][vlaue]
-                    keyToTransactions[value] = keyTransactions
-
-            
+                    keyTransactions = copy.deepcopy(current_block['transactions'][key])
+                    keyToTransactions[key] = keyTransactions
 
         return keyToTransactions
+
+    def find_messages(self, keyTo):
+        i = 0
+        keyToMessages = {}
+
+        for block_number in reversed(range(len(self.chain))):
+
+            current_block = self.chain[block_number]
+
+            for key in current_block['messages'].keys():
+
+                if current_block['messages'][key]['mTo'] == keyTo:
+
+                    keyMessages = copy.deepcopy(current_block['messages'][key])
+                    keyToMessages[key] = keyMessages
+
+                        
+
+        return keyToMessages
 
     def login(self, request):
         try:
@@ -248,6 +271,101 @@ class Blockchain:
         
         return transaction_id
 
+    def send_message(self, keyFrom, keyTo, keyMessage, keyPrivate, gas):
+
+        try:
+            message = {
+                'mTime': int(time.time()),
+                'mFrom': keyFrom,
+                'mTo': keyTo,
+                'Sent_Message': keyMessage,
+                'gas': gas
+            }
+
+            
+            private_key = keyPrivate
+            assert message['mFrom'] and message['mTo'] and message['Sent_Message']
+            assert private_key == self.wallets[message['mFrom']]['private_key']
+            assert not message['mFrom'] == message['mTo'] and message['mTo'] in self.wallets
+            assert gas > 0 and gas <= self.wallets[message['mFrom']]['balance']
+
+
+        except:
+            return False
+
+
+        message_id = self.hash_transaction(message)
+        self.mespool[message_id] = message
+
+        return message_id
+
+    def move_message_from_mespool(self):
+
+        processed_messages = {}
+
+        while len(self.mespool) > 0:
+
+            message_id = random.choice(list(self.mespool))
+            message = copy.deepcopy(self.mespool[message_id])
+
+            if message['gas'] <= self.wallets[message['mFrom']]['balance']:
+
+                self.wallets[message['mFrom']]['balance'] -= message['gas']
+
+                processed_messages[message_id] = message
+            
+            del self.mespool[message_id]
+
+        return processed_messages
+
+    def move_contract_from_conpool(self):
+
+        processed_contracts = {}
+
+        while len(self.conpool) > 0:
+
+            contract_id = random.choice(list(self.conpool))
+            contract = copy.deepcopy(self.conpool[contract_id])
+
+            
+
+            contract['Data'] = exec(contract['contract_code'])
+
+
+            if contract['gas'] <= self.wallets[contract['public_key']]['balance']:
+
+                self.wallets[contract['public_key']]['balance'] -= contract['gas']
+
+                processed_contracts[contract_id] = contract
+
+            del self.conpool[contract_id]
+
+        return processed_contracts
+
+    def create_contract(self, keyPublic, keyPrivate, keyContract, keyName, gas):
+
+        try:
+            contract = {
+                'cTime': int(time.time()),
+                'public_key': keyPublic,
+                'contract_code': keyContract,
+                'contract_name': keyName,
+                'gas': gas,
+                'Data': {}
+            }
+
+            private_key = keyPrivate
+            assert contract['public_key'] and contract['contract_code'] and contract['contract_name']
+            assert private_key == self.wallets[contract['public_key']]['private_key']
+            assert gas > 0 and gas <= self.wallets[contract['public_key']]['balance']
+
+        except:
+            return False
+
+        contract_id = self.hash_transaction(contract)
+        self.conpool[contract_id] = contract
+
+        return contract_id
 
 @app.route('/login', methods = ['GET'])
 def login():
@@ -256,9 +374,11 @@ def login():
     login_success = blockchain.login(request)
     walletBalance = blockchain.wallets[login_success]['balance']
     keyTransactions = blockchain.find_transactions(login_success)
+    keyMessages = blockchain.find_messages(login_success)
 
     if login_success:
-        return render_template('Group3_Login.html', public_key=login_success, Balance=walletBalance, Transaction=json.dumps(keyTransactions))
+        return render_template('Group3_Login.html', public_key=login_success, Balance=walletBalance, Transaction=json.dumps(keyTransactions), Messages=json.dumps(keyMessages))
+
     else:
         return Response(json.dumps({'Error': 'Invalid transaction'}), status=400, mimetype='application/json')
 
@@ -280,10 +400,37 @@ def create_transaction_login():
     else:
         return Response(json.dumps({'Error': 'Invalid transaction'}), status=400, mimetype='application/json')
 
+@app.route('/send_message', methods = ['POST'])
+def send_message():
+
+    keyFrom = request.form['mFrom']
+    keyTo = request.form['mTo']
+    keyMessage = request.form['Sent_Message']
+    keyPrivate = request.form['private_key']
+    gas = len(keyMessage) * 0.01
+
+    message_id = blockchain.send_message(keyFrom,keyTo,keyMessage,keyPrivate,gas)
+
+    if message_id:
+        return Response(json.dumps({'Result': message_id}), status=200, mimetype='application/json')
+    else:
+        return Response(json.dumps({'Error': 'Invalid Message'}), status=400, mimetype='application/json')
+
+@app.route('/create_contract', methods = ['POST'])
+def create_contract():
+    keyPublic = request.form['public_Key']
+    keyPrivate = request.form['private_key']
+    keyContract = request.form['Contract']
+    keyName = request.form['Name']
+    gas = len(keyContract) * 0.01
 
 
+    contract_id = blockchain.create_contract(keyPublic,keyPrivate,keyContract,keyName,gas)
 
-
+    if contract_id:
+        return Response(json.dumps({'Result': contract_id}), status=200, mimetype='application/json')
+    else:
+        return Response(json.dumps({'Error': 'Invalid Contract'}), status=400, mimetype='application/json')
 
 
 
