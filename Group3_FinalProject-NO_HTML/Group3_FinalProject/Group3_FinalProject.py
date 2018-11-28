@@ -17,6 +17,7 @@ class Blockchain:
         self.chain = []
         self.difficulty_target = 4
         self.wallets = {}
+		self.contracts = {}
         self.mempool = {}
         #used to hold the messages and contracts before they are processed into the block
         self.conpool = {}
@@ -48,6 +49,7 @@ class Blockchain:
                 'admin': request.args.get('public_key', type = str),
                 'contract_code': contractCode,
                 'states' : {},
+				'accessor' : str,
                 'contract_name': request.args.get('contract_name', type = str),
                 'gas': None,
                 'data': {}
@@ -55,26 +57,20 @@ class Blockchain:
 
             contract['gas'] = len(contract['contract_code']) * 0.01
             assert contract['public_key'] and contract['contract_code'] and contract['contract_name']
-            #assert private_key == self.wallets[contract['public_key']]['private_key']
-            assert contract['gas'] > 0 # and gas <= self.wallets[contract['public_key']]['balance']
+            assert contract['gas'] > 0
 
         except:
             return False
 
-        # contract_id = self.hash_transaction(contract)
-        # self.conpool[contract_id] = contract
-
-        self.wallets[contract['public_key']] = contract # contracts and wallets stored in same dict, to be found using public keys
+        self.contracts[contract['public_key']] = contract 
         return contract['public_key']
         
-    def call_contract(self, contract_public_key):
+    def call_contract(self, contract_public_key, accessor_public_key, accessor_private_key):
         # take in public key of accessor, desired contract public key
-        # takes in any other params for the code
         # pass the code to conpool for running
-        self.conpool[contract_public_key] = self.wallets[contract_public_key]
-        # runs the code??? how???
-        # output to the block once mined
-        return True
+		if contract['gas'] <= self.wallets[accessor_public_key]['balance'] and accessor_private_key == wallets[accessor_public_key]['private_key']:
+			self.conpool[contract_public_key] = self.contracts[contract_public_key]
+			self.conpool[contract_public_key]['accessor'] = accessor_public_key
 
     def get_clean_wallets(self):
         clean_wallets = copy.deepcopy(blockchain.wallets)
@@ -287,17 +283,17 @@ class Blockchain:
             contract_id = list(self.conpool)[len(self.conpool) - 1]
             contract = copy.deepcopy(self.conpool[contract_id])
 
+            if contract['gas'] <= self.wallets[contract['accessor']]['balance']:
 
-            if contract['gas'] <= self.wallets[contract['public_key']]['balance']:
-
-                self.wallets[contract['public_key']]['balance'] -= contract['gas']
+                self.wallets[contract['accessor']]['balance'] -= contract['gas']
 
                 #namespace is used to collect the output dictionary from the executed code
                 namespace = {}
-                globalsParameter = {'__builtins__' : None}
+                globalsParameter = {'__builtins__' : None, 'Blockchain' : Blockchain, 'blockchain': blockchain, 'import': None, 'from': None}
                 #runs the code of the contract
                 exec(contract['contract_code'], globals(), namespace)
-                contract['Data'] = namespace['output']
+                contract['Data'] = namespace['output'] # passes states into the block
+				self.contracts[contract_id]['states'] = namespace['output'] # updates contract state
 
                 #deletes the code from the contract afterwards in order to clean up the blocks
                 del contract['contract_code']
