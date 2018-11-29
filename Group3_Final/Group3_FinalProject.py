@@ -50,6 +50,7 @@ class Blockchain:
                 'admin': request.args.get('public_key', type = str),
                 'contract_code': contractCode,
                 'states' : {},
+                'states_hash' : None,
 				'accessor' : str,
                 'contract_name': request.args.get('contract_name', type = str),
                 'gas': None,
@@ -91,7 +92,7 @@ class Blockchain:
                         i = i + 1
                     else:
                         i = i + 1
-
+                
             if currContract['gas'] <= self.wallets[accessor_public_key]['balance'] and accessor_private_key == self.wallets[accessor_public_key]['private_key']:
                 self.conpool[contract_address] = currContract
                 self.conpool[contract_address]['accessor'] = accessor_public_key
@@ -142,6 +143,30 @@ class Blockchain:
         hashId.update(repr(transaction).encode('utf-8'))
         return str(hashId.hexdigest())
 
+    def hash_contract_states(self, contract, states): # hashes all of the states inside of the contract in a similar function to a merkle root
+        
+        if len(states) == 0:
+            return None
+        
+        elif len(states) == 1:
+            hashId = hashlib.sha256()
+            hashId.update(contract['states'][states[0]].encode('utf-8'))
+            return hashId
+        
+        else:
+            new_states = []
+
+            for i in range(0, len(states), 2):
+                if len(states) > i+1:
+                    hashId = hashlib.sha256()
+                    hashId.update(contract['states'][states[i]].encode('utf-8') + contract['states'][states[i]].encode('utf-8'))
+                    new_states.append(str(hashId.hexdigest()))
+                else:
+                    new_states.append(contract['states'][states[i]].encode('utf-8'))
+
+            return self.hash_contract_states(contract, new_states)
+
+
 
     def choose_transactions_from_mempool(self):
 
@@ -187,6 +212,34 @@ class Blockchain:
 
             return self.calculate_merkle_root(new_transactions)
 
+    def calculate_patricia_trie(self, contracts): # calculates the state "merkle root" AKA my dear lady patricia trie
+        
+        if len(contracts) == 0:
+            return None
+        
+        elif len(contracts == 1):
+            return self.contracts[contracts[0]]['state_hash']
+        
+        else:
+            new_contracts = []
+
+            for i in range(0, len(contracts), 2):
+
+                if len(contracts) > (i+1):
+                    hashId = hashlib.sha256()
+                    hashId.update(self.contracts[contracts[i]]['state_hash'].encode('utf-8') + self.contracts[contracts[i+1]]['state_hash'].encode('utf-8'))
+                    new_contracts.append(str(hashId.hexdigest()))
+                else:
+                    new_contracts.append(self.contracts[contracts[i]]['state_hash'])
+
+            return self.calculate_patricia_trie(new_contracts)
+
+    def check_patricia_trie(self, block):
+        if self.calculate_patricia_trie(block['contracts']) == block['header']['patricia_trie']:
+            return True
+        else:
+            return False
+
 
     def check_merkle_root(self, block):
         if self.calculate_merkle_root(block['transactions']) == block['header']['merkle_root']:
@@ -215,7 +268,8 @@ class Blockchain:
                 'block_time': int(time.time()),
                 'block_nonce': None,
                 'previous_block_hash': (None if len(self.chain) == 0 else self.get_last_block()['hash']),
-                'merkle_root': None
+                'merkle_root': None,
+                'patricia_trie' : None # "merkle root" for the contract states
             },
             'transactions' : {},
             'contracts' : {},
@@ -231,6 +285,7 @@ class Blockchain:
         block['transactions'] = self.choose_transactions_from_mempool()
         block['contracts'] = self.move_contract_from_conpool()
         block['header']['merkle_root'] = self.calculate_merkle_root(list(block['transactions'].keys()))
+        block['header']['patricia_trie'] = self.calculate_patricia_trie(list(block['contracts'].keys())) # "Merkle root" for contracts
 
         while True:
             block['header']['block_nonce'] = str(binascii.b2a_hex(os.urandom(8)))
@@ -258,6 +313,9 @@ class Blockchain:
 
             if not self.check_merkle_root(current_block):
                 return False
+            
+            if not self.check_patricia_trie(current_block):
+                return False
 
         return True
 
@@ -283,6 +341,7 @@ class Blockchain:
                     exec(contract['contract_code'], globalsParameter, namespace)
                      # passes states into the block
                     contract['states'] = namespace['output'] # updates contract state
+                    contract['states_hash'] = self.hash_contract_states(contract, list(contract['states'].keys())) # hashes all of the calculated states and adds the hash to the contract
                     contract['data'] = namespace['data']
                     self.contracts[contract_id]['states'] = namespace['output'] # updates contract state
                     self.contracts[contract_id]['data'] = namespace['data']
