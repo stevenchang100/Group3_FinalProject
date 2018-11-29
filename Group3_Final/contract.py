@@ -1,4 +1,9 @@
-
+#This contract is made to collect data about a public_key provided by the caller
+#it will return any transaction sent to the public_key and contracts that they are the admin of
+#Contracts were made so that the first time it is run it will initialize what data it needs
+#and subsequent runs can then properly take in variables, calculate and return the values
+#user need to know what to send and in what order and append it into the url
+#ex: &var=1&var=2...
 if contract['data']:
 	keyToTransactions = {}
 	for block_number in reversed(range(len(blockchain.chain))):

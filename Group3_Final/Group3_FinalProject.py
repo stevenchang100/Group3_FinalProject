@@ -7,6 +7,8 @@ import hashlib
 import os
 import binascii
 from flask import Flask, request, Response, render_template
+#this flask module was added to allow url parsing for multiple variables when
+#the blockchain cannot hard code how many a contract may need beforehand
 from flask_restful import reqparse
 
 app = Flask(__name__)
@@ -56,6 +58,10 @@ class Blockchain:
                 'gas': None,
                 'data': {}
             }
+            #our gas is calculated by the amount of chars in the code
+            #we did it this way to promote the use of smaller codes that are quick to run
+            #These codes arn't mean't to be huge and instead get the job done as small as possible
+            #also if the codes are smaller it saves data on the blockchain
 
             contract['gas'] = len(contract['contract_code']) * 0.001
             assert contract['public_key'] and contract['contract_code'] and contract['contract_name']
@@ -71,28 +77,31 @@ class Blockchain:
     def call_contract(self, request):
         # take in public key of accessor, desired contract public key
         # pass the code to conpool for running
+        try:
+            i = 0
+            contract_address = request.args.get('contract_address', default = 0, type = str)
+            accessor_public_key = request.args.get('public_key', default = 0, type = str)
+            accessor_private_key = request.args.get('private_key', default = 0, type = str)
 
-        i = 0
-        contract_address = request.args.get('contract_address', default = 0, type = str)
-        accessor_public_key = request.args.get('public_key', default = 0, type = str)
-        accessor_private_key = request.args.get('private_key', default = 0, type = str)
+            currContract = copy.deepcopy(self.contracts[contract_address])
 
-        currContract = copy.deepcopy(self.contracts[contract_address])
+            if currContract['states']:
+                #code that parces the url for contract variables var
+                parser = reqparse.RequestParser()
+                parser.add_argument('var', action='append')
+                args = parser.parse_args()
+                
 
-        if currContract['states']:
-            parser = reqparse.RequestParser()
-            parser.add_argument('var', action='append')
-            args = parser.parse_args()
-            
-
-            for key in currContract['data'].keys():
-
-                if args['var'][i]:
-                    currContract['data'][key] = args['var'][i]
-                    i = i + 1
-                else:
-                    i = i + 1
-
+                for key in currContract['data'].keys():
+                    #takes in as many args as the contract requires
+                    if args['var'][i]:
+                        #inputs the var into the data dict of the contract to be used in calculation
+                        currContract['data'][key] = args['var'][i]
+                        i = i + 1
+                    else:
+                        i = i + 1
+        except:
+            return False
         if currContract['gas'] <= self.wallets[accessor_public_key]['balance'] and accessor_private_key == self.wallets[accessor_public_key]['private_key']:
             self.conpool[contract_address] = currContract
             self.conpool[contract_address]['accessor'] = accessor_public_key
@@ -142,16 +151,13 @@ class Blockchain:
         return str(hashId.hexdigest())
 
     def hash_contract_states(self, contract, states): # hashes all of the states inside of the contract in a similar function to a merkle root
-
-        if(states[0] == None):
-            return None
-
-        if (len(states) == 0):
+        
+        if len(states) == 0:
             return None
         
-        elif (len(states) == 1):
+        elif len(states) == 1:
             hashId = hashlib.sha256()
-            hashId.update(states[0].encode('utf-8'))
+            hashId.update(contract['states'][states[0]].encode('utf-8'))
             return hashId
         
         else:
@@ -160,14 +166,12 @@ class Blockchain:
             for i in range(0, len(states), 2):
                 if len(states) > i+1:
                     hashId = hashlib.sha256()
-                    hashId.update(states[i].encode('utf-8') + states[i].encode('utf-8'))
+                    hashId.update(contract['states'][states[i]].encode('utf-8') + contract['states'][states[i]].encode('utf-8'))
                     new_states.append(str(hashId.hexdigest()))
                 else:
-                    hashId = hashlib.sha256()
-                    hashId.update(states[i].encode('utf-8'))
-                    new_states.append(str(hashId.hexdigest()))
+                    new_states.append(contract['states'][states[i]].encode('utf-8'))
 
-                return self.hash_contract_states(contract, new_states)
+            return self.hash_contract_states(contract, new_states)
 
 
 
@@ -217,9 +221,6 @@ class Blockchain:
 
     def calculate_patricia_trie(self, contracts): # calculates the state "merkle root" AKA my dear lady patricia trie
         
-        if not contracts:
-            return None
-
         if len(contracts) == 0:
             return None
         
@@ -228,19 +229,17 @@ class Blockchain:
         
         else:
             new_contracts = []
-            
-            for i in range(0, len(contracts), 2):
-                if self.contracts[contracts[i]]['states_hash'] != None:
-                    if (len(contracts) > (i+1)) and (self.contracts[contracts[i+1]]['states_hash'] != None):
-                        hashId = hashlib.sha256()
-                        hashId.update(self.contracts[contracts[i]]['states_hash'].encode('utf-8') + self.contracts[contracts[i+1]]['state_hash'].encode('utf-8'))
-                        new_contracts.append(str(hashId.hexdigest()))
-                    else:
-                        new_contracts.append(self.contracts[contracts[i]]['states_hash'])
 
-                    return self.calculate_patricia_trie(new_contracts)
+            for i in range(0, len(contracts), 2):
+
+                if len(contracts) > (i+1):
+                    hashId = hashlib.sha256()
+                    hashId.update(self.contracts[contracts[i]]['state_hash'].encode('utf-8') + self.contracts[contracts[i+1]]['state_hash'].encode('utf-8'))
+                    new_contracts.append(str(hashId.hexdigest()))
                 else:
-                    return None
+                    new_contracts.append(self.contracts[contracts[i]]['state_hash'])
+
+            return self.calculate_patricia_trie(new_contracts)
 
     def check_patricia_trie(self, block):
         if self.calculate_patricia_trie(block['contracts']) == block['header']['patricia_trie']:
@@ -337,30 +336,30 @@ class Blockchain:
 
             contract_id = list(self.conpool)[len(self.conpool) - 1]
             contract = copy.deepcopy(self.conpool[contract_id])
-            try:
-                if contract['gas'] <= self.wallets[contract['accessor']]['balance']:
 
-                    self.wallets[contract['accessor']]['balance'] -= contract['gas']
-                    #namespace is used to collect the output dictionary from the executed code
-                    namespace = {'contract_id': contract_id, 'contract': contract}
-                    globalsParameter = {'__builtins__' : None, 'Blockchain' : Blockchain, 'blockchain': blockchain, 'import': None, 'from': None, 
-                    'reversed': reversed, 'range': range, 'len': len}
-                    #runs the code of the contract
-                    exec(contract['contract_code'], globalsParameter, namespace)
-                     # passes states into the block
-                    contract['states'] = namespace['output'] # updates contract state
-                    print(contract['states'])
-                    contract['states_hash'] = self.hash_contract_states(contract, list(contract['states'].values())) # hashes all of the calculated states and adds the hash to the contract
-                    contract['data'] = namespace['data']
-                    self.contracts[contract_id]['states'] = namespace['output'] # updates contract state
-                    self.contracts[contract_id]['data'] = namespace['data']
-                    #deletes the code from the contract afterwards in order to clean up the blocks
-                    del contract['contract_code']
-                    processed_contracts[contract_id] = contract 
+            if contract['gas'] <= self.wallets[contract['accessor']]['balance']:
 
-                del self.conpool[contract_id]
-            except:
-                pass
+                self.wallets[contract['accessor']]['balance'] -= contract['gas']
+                
+
+                #namespace is used to collect the output dictionary from the executed code 
+                namespace = {'contract_id': contract_id, 'contract': contract}
+                globalsParameter = {'__builtins__' : None, 'Blockchain' : Blockchain, 'blockchain': blockchain, 'import': None, 'from': None, 
+                'reversed': reversed, 'range': range, 'len': len}
+                #runs the code of the contract
+                exec(contract['contract_code'], globalsParameter, namespace)
+                 # passes states into the block
+                contract['states'] = namespace['output'] # updates contract state
+                contract['states_hash'] = self.hash_contract_states(contract, list(contract['states'].keys())) # hashes all of the calculated states and adds the hash to the contract
+                contract['data'] = namespace['data']
+                self.contracts[contract_id]['states'] = namespace['output'] # updates contract state
+                self.contracts[contract_id]['data'] = namespace['data']
+                #deletes the code from the contract afterwards in order to clean up the blocks
+                del contract['contract_code']
+                processed_contracts[contract_id] = contract 
+
+            del self.conpool[contract_id]
+
 
         return processed_contracts
 
