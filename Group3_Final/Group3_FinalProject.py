@@ -152,7 +152,7 @@ class Blockchain:
         elif (len(states) == 1):
             hashId = hashlib.sha256()
             hashId.update(states[0].encode('utf-8'))
-            return hashId
+            return str(hashId.hexdigest())
         
         else:
             new_states = []
