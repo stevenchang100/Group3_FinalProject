@@ -43,15 +43,23 @@ class Blockchain:
             fileName = request.args.get('contract_code', type = str)
             file = open(fileName,'r')
             contractCode = file.read()
+<<<<<<< HEAD
 
+=======
+            file.close()
+>>>>>>> origin/TheFinalSteven
             contract = {
                 'cTime': int(time.time()),
                 'public_key' : binascii.b2a_hex(os.urandom(8)).decode('ascii'),
                 'admin': request.args.get('public_key', type = str),
                 'contract_code': contractCode,
                 'states' : {},
+<<<<<<< HEAD
                 'states_hash' : None,
 				'accessor' : str,
+=======
+				'accessor' : None,
+>>>>>>> origin/TheFinalSteven
                 'contract_name': request.args.get('contract_name', type = str),
                 'gas': None,
                 'data': {}
@@ -71,6 +79,7 @@ class Blockchain:
     def call_contract(self, request):
         # take in public key of accessor, desired contract public key
         # pass the code to conpool for running
+<<<<<<< HEAD
         try:
             i = 0
             contract_address = request.args.get('contract_address', default = 0, type = str)
@@ -101,6 +110,36 @@ class Blockchain:
 
         except:
             return False
+=======
+
+        i = 0
+        contract_address = request.args.get('contract_address', default = 0, type = str)
+        accessor_public_key = request.args.get('public_key', default = 0, type = str)
+        accessor_private_key = request.args.get('private_key', default = 0, type = str)
+
+        currContract = copy.deepcopy(self.contracts[contract_address])
+
+        if currContract['states']:
+            parser = reqparse.RequestParser()
+            parser.add_argument('var', action='append')
+            args = parser.parse_args()
+            
+
+            for key in currContract['data'].keys():
+
+                if args['var'][i]:
+                    currContract['data'][key] = args['var'][i]
+                    i = i + 1
+                else:
+                    i = i + 1
+
+        if currContract['gas'] <= self.wallets[accessor_public_key]['balance'] and accessor_private_key == self.wallets[accessor_public_key]['private_key']:
+            self.conpool[contract_address] = currContract
+            self.conpool[contract_address]['accessor'] = accessor_public_key
+
+        return currContract
+
+>>>>>>> origin/TheFinalSteven
 
 
 #_________________________________________________________________________
@@ -143,6 +182,7 @@ class Blockchain:
         hashId.update(repr(transaction).encode('utf-8'))
         return str(hashId.hexdigest())
 
+<<<<<<< HEAD
     def hash_contract_states(self, contract, states): # hashes all of the states inside of the contract in a similar function to a merkle root
         
         if len(states) == 0:
@@ -167,6 +207,8 @@ class Blockchain:
             return self.hash_contract_states(contract, new_states)
 
 
+=======
+>>>>>>> origin/TheFinalSteven
 
     def choose_transactions_from_mempool(self):
 
@@ -212,6 +254,7 @@ class Blockchain:
 
             return self.calculate_merkle_root(new_transactions)
 
+<<<<<<< HEAD
     def calculate_patricia_trie(self, contracts): # calculates the state "merkle root" AKA my dear lady patricia trie
         
         if len(contracts) == 0:
@@ -240,6 +283,8 @@ class Blockchain:
         else:
             return False
 
+=======
+>>>>>>> origin/TheFinalSteven
 
     def check_merkle_root(self, block):
         if self.calculate_merkle_root(block['transactions']) == block['header']['merkle_root']:
@@ -268,8 +313,12 @@ class Blockchain:
                 'block_time': int(time.time()),
                 'block_nonce': None,
                 'previous_block_hash': (None if len(self.chain) == 0 else self.get_last_block()['hash']),
+<<<<<<< HEAD
                 'merkle_root': None,
                 'patricia_trie' : None # "merkle root" for the contract states
+=======
+                'merkle_root': None
+>>>>>>> origin/TheFinalSteven
             },
             'transactions' : {},
             'contracts' : {},
@@ -285,7 +334,10 @@ class Blockchain:
         block['transactions'] = self.choose_transactions_from_mempool()
         block['contracts'] = self.move_contract_from_conpool()
         block['header']['merkle_root'] = self.calculate_merkle_root(list(block['transactions'].keys()))
+<<<<<<< HEAD
         block['header']['patricia_trie'] = self.calculate_patricia_trie(list(block['contracts'].keys())) # "Merkle root" for contracts
+=======
+>>>>>>> origin/TheFinalSteven
 
         while True:
             block['header']['block_nonce'] = str(binascii.b2a_hex(os.urandom(8)))
@@ -313,9 +365,12 @@ class Blockchain:
 
             if not self.check_merkle_root(current_block):
                 return False
+<<<<<<< HEAD
             
             if not self.check_patricia_trie(current_block):
                 return False
+=======
+>>>>>>> origin/TheFinalSteven
 
         return True
 
@@ -341,7 +396,10 @@ class Blockchain:
                     exec(contract['contract_code'], globalsParameter, namespace)
                      # passes states into the block
                     contract['states'] = namespace['output'] # updates contract state
+<<<<<<< HEAD
                     contract['states_hash'] = self.hash_contract_states(contract, list(contract['states'].keys())) # hashes all of the calculated states and adds the hash to the contract
+=======
+>>>>>>> origin/TheFinalSteven
                     contract['data'] = namespace['data']
                     self.contracts[contract_id]['states'] = namespace['output'] # updates contract state
                     self.contracts[contract_id]['data'] = namespace['data']
@@ -356,7 +414,10 @@ class Blockchain:
         return processed_contracts
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/TheFinalSteven
 #This is the url used to create Contracts
 #It takes input from the HTML page and sends it into the create_contract function to create Contracts
 @app.route('/create_contract', methods = ['GET'])
@@ -385,11 +446,14 @@ def call_contract():
 def show_conpool():
     return Response(json.dumps(blockchain.conpool), status=200, mimetype='application/json')
 
+<<<<<<< HEAD
 @app.route('/show_contracts', methods = ['GET'])
 def show_contracts():
     return Response(json.dumps(blockchain.contracts), status=200, mimetype='application/json')
 
 
+=======
+>>>>>>> origin/TheFinalSteven
 
 #NEW-----------------------------------------------------------------------------------------------------
 @app.route('/create_wallet', methods = ['GET'])
