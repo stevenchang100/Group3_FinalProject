@@ -218,7 +218,7 @@ class Blockchain:
 
             return self.calculate_merkle_root(new_transactions)
 
-    def calculate_patricia_trie(self, contracts): # calculates the state "merkle root" AKA my dear lady patricia trie
+    def calculate_patricia_trie(self, contracts, block): # calculates the state "merkle root" AKA my dear lady patricia trie
         
         if not contracts: # if contracts list has not been initialized
             return None
@@ -227,7 +227,7 @@ class Blockchain:
             return None
         
         elif len(contracts) == 1: #if only one contract, return the hash of its states
-            return self.contracts[contracts[0]]['states_hash']
+            return block['contracts'][contracts[0]]['states_hash']
         
         else: #if more than 1 contracts
             new_contracts = []
@@ -236,15 +236,15 @@ class Blockchain:
 
                 if len(contracts) > (i+1):
                     hashId = hashlib.sha256()
-                    hashId.update(repr(self.contracts[contracts[i]]['states_hash']).encode('utf-8') + repr(self.contracts[contracts[i+1]]['state_hash']).encode('utf-8'))
+                    hashId.update(repr(block['contracts'][contracts[i]]['states_hash']).encode('utf-8') + repr(block['contracts'][contracts[i+1]]['state_hash']).encode('utf-8'))
                     new_contracts.append(str(hashId.hexdigest()))
                 else:
-                    new_contracts.append(self.contracts[contracts[i]]['states_hash'])
+                    new_contracts.append(block['contracts'][contracts[i]]['states_hash'])
 
-                return self.calculate_patricia_trie(new_contracts) # returns the function, recurring until there is only one contract left in the container, containing the patricia trie
+                return self.calculate_patricia_trie(new_contracts, block) # returns the function, recurring until there is only one contract left in the container, containing the patricia trie
 
     def check_patricia_trie(self, block): # checks the block's stored patricia trie against one calculated from the contract's value of the block
-        if self.calculate_patricia_trie(block['contracts']) == block['header']['patricia_trie']:
+        if self.calculate_patricia_trie(block['contracts'], block) == block['header']['patricia_trie']:
             return True
         else:
             return False
@@ -294,7 +294,7 @@ class Blockchain:
         block['transactions'] = self.choose_transactions_from_mempool()
         block['contracts'] = self.move_contract_from_conpool()
         block['header']['merkle_root'] = self.calculate_merkle_root(list(block['transactions'].keys()))
-        block['header']['patricia_trie'] = self.calculate_patricia_trie(list(block['contracts'].keys())) # "Merkle root" for contracts
+        block['header']['patricia_trie'] = self.calculate_patricia_trie(list(block['contracts'].keys()), block) # "Merkle root" for contracts
 
         while True:
             block['header']['block_nonce'] = str(binascii.b2a_hex(os.urandom(8)))
