@@ -142,13 +142,16 @@ class Blockchain:
         return str(hashId.hexdigest())
 
     def hash_contract_states(self, contract, states): # hashes all of the states inside of the contract in a similar function to a merkle root
-        
-        if len(states) == 0:
+
+        if(states[0] == None):
+            return None
+
+        if (len(states) == 0):
             return None
         
-        elif len(states) == 1:
+        elif (len(states) == 1):
             hashId = hashlib.sha256()
-            hashId.update(contract['states'][states[0]].encode('utf-8'))
+            hashId.update(states[0].encode('utf-8'))
             return hashId
         
         else:
@@ -157,12 +160,14 @@ class Blockchain:
             for i in range(0, len(states), 2):
                 if len(states) > i+1:
                     hashId = hashlib.sha256()
-                    hashId.update(contract['states'][states[i]].encode('utf-8') + contract['states'][states[i]].encode('utf-8'))
+                    hashId.update(states[i].encode('utf-8') + states[i].encode('utf-8'))
                     new_states.append(str(hashId.hexdigest()))
                 else:
-                    new_states.append(contract['states'][states[i]].encode('utf-8'))
+                    hashId = hashlib.sha256()
+                    hashId.update(states[i].encode('utf-8'))
+                    new_states.append(str(hashId.hexdigest()))
 
-            return self.hash_contract_states(contract, new_states)
+                return self.hash_contract_states(contract, new_states)
 
 
 
@@ -212,25 +217,30 @@ class Blockchain:
 
     def calculate_patricia_trie(self, contracts): # calculates the state "merkle root" AKA my dear lady patricia trie
         
+        if not contracts:
+            return None
+
         if len(contracts) == 0:
             return None
         
-        elif len(contracts == 1):
-            return self.contracts[contracts[0]]['state_hash']
+        elif len(contracts) == 1:
+            return self.contracts[contracts[0]]['states_hash']
         
         else:
             new_contracts = []
-
+            
             for i in range(0, len(contracts), 2):
+                if self.contracts[contracts[i]]['states_hash'] != None:
+                    if (len(contracts) > (i+1)) and (self.contracts[contracts[i+1]]['states_hash'] != None):
+                        hashId = hashlib.sha256()
+                        hashId.update(self.contracts[contracts[i]]['states_hash'].encode('utf-8') + self.contracts[contracts[i+1]]['state_hash'].encode('utf-8'))
+                        new_contracts.append(str(hashId.hexdigest()))
+                    else:
+                        new_contracts.append(self.contracts[contracts[i]]['states_hash'])
 
-                if len(contracts) > (i+1):
-                    hashId = hashlib.sha256()
-                    hashId.update(self.contracts[contracts[i]]['state_hash'].encode('utf-8') + self.contracts[contracts[i+1]]['state_hash'].encode('utf-8'))
-                    new_contracts.append(str(hashId.hexdigest()))
+                    return self.calculate_patricia_trie(new_contracts)
                 else:
-                    new_contracts.append(self.contracts[contracts[i]]['state_hash'])
-
-            return self.calculate_patricia_trie(new_contracts)
+                    return None
 
     def check_patricia_trie(self, block):
         if self.calculate_patricia_trie(block['contracts']) == block['header']['patricia_trie']:
@@ -339,7 +349,8 @@ class Blockchain:
                     exec(contract['contract_code'], globalsParameter, namespace)
                      # passes states into the block
                     contract['states'] = namespace['output'] # updates contract state
-                    contract['states_hash'] = self.hash_contract_states(contract, list(contract['states'].keys())) # hashes all of the calculated states and adds the hash to the contract
+                    print(contract['states'])
+                    contract['states_hash'] = self.hash_contract_states(contract, list(contract['states'].values())) # hashes all of the calculated states and adds the hash to the contract
                     contract['data'] = namespace['data']
                     self.contracts[contract_id]['states'] = namespace['output'] # updates contract state
                     self.contracts[contract_id]['data'] = namespace['data']
