@@ -1,4 +1,10 @@
 #!/usr/bin/python3
+
+# By    Jack Hamilton   100550931
+# +     Madison Hind    100559846
+# +     Steven Chang    100589035
+# +     Pavlo Salimon   100562122
+
 import json
 import copy
 import time
@@ -143,31 +149,28 @@ class Blockchain:
 
     def hash_contract_states(self, contract, states): # hashes all of the states inside of the contract in a similar function to a merkle root
 
-        if(states[0] == None):
-            return None
-
-        if (len(states) == 0):
+        if (len(states) == 0): #if there are no states, return none
             return None
         
-        elif (len(states) == 1):
+        elif (len(states) == 1): # if there is one state, return just the one state, hashed
             hashId = hashlib.sha256()
-            hashId.update(states[0].encode('utf-8'))
-            return str(hashId.hexdigest())
+            hashId.update(repr(states[0]).encode('utf-8')) # repr used as a catch all, in case some states are dicts
+            return str(hashId.hexdigest()) # returns hashed state for storage in the contract section of the block
         
         else:
             new_states = []
 
-            for i in range(0, len(states), 2):
-                if len(states) > i+1:
+            for i in range(0, len(states), 2): # iterate through all of the states
+                if len(states) > i+1: # if this is not hte last state, make a tree
                     hashId = hashlib.sha256()
-                    hashId.update(states[i].encode('utf-8') + states[i+1].encode('utf-8'))
+                    hashId.update(repr(states[i]).encode('utf-8') + repr(states[i+1]).encode('utf-8'))
                     new_states.append(str(hashId.hexdigest()))
-                else:
+                else: # if this is the last state, hash it
                     hashId = hashlib.sha256()
-                    hashId.update(states[i].encode('utf-8'))
+                    hashId.update(repr(states[i]).encode('utf-8'))
                     new_states.append(str(hashId.hexdigest()))
 
-                return self.hash_contract_states(contract, new_states)
+                return self.hash_contract_states(contract, new_states) # recursive function that calls this again until there is only one state left
 
 
 
@@ -217,32 +220,30 @@ class Blockchain:
 
     def calculate_patricia_trie(self, contracts): # calculates the state "merkle root" AKA my dear lady patricia trie
         
-        if not contracts:
+        if not contracts: # if contracts list has not been initialized
             return None
 
-        if len(contracts) == 0:
+        if len(contracts) == 0: 
             return None
         
-        elif len(contracts) == 1:
+        elif len(contracts) == 1: #if only one contract, return the hash of its states
             return self.contracts[contracts[0]]['states_hash']
         
-        else:
+        else: #if more than 1 contracts
             new_contracts = []
             
-            for i in range(0, len(contracts), 2):
-                if self.contracts[contracts[i]]['states_hash'] != None:
-                    if (len(contracts) > (i+1)) and (self.contracts[contracts[i+1]]['states_hash'] != None):
-                        hashId = hashlib.sha256()
-                        hashId.update(self.contracts[contracts[i]]['states_hash'].encode('utf-8') + self.contracts[contracts[i+1]]['state_hash'].encode('utf-8'))
-                        new_contracts.append(str(hashId.hexdigest()))
-                    else:
-                        new_contracts.append(self.contracts[contracts[i]]['states_hash'])
+            for i in range(0, len(contracts), 2): # iterate through the list of contracts
 
-                    return self.calculate_patricia_trie(new_contracts)
+                if len(contracts) > (i+1):
+                    hashId = hashlib.sha256()
+                    hashId.update(repr(self.contracts[contracts[i]]['states_hash']).encode('utf-8') + repr(self.contracts[contracts[i+1]]['state_hash']).encode('utf-8'))
+                    new_contracts.append(str(hashId.hexdigest()))
                 else:
-                    return None
+                    new_contracts.append(self.contracts[contracts[i]]['states_hash'])
 
-    def check_patricia_trie(self, block):
+                return self.calculate_patricia_trie(new_contracts) # returns the function, recurring until there is only one contract left in the container, containing the patricia trie
+
+    def check_patricia_trie(self, block): # checks the block's stored patricia trie against one calculated from the contract's value of the block
         if self.calculate_patricia_trie(block['contracts']) == block['header']['patricia_trie']:
             return True
         else:
@@ -340,20 +341,24 @@ class Blockchain:
         #try:
             if contract['gas'] <= self.wallets[contract['accessor']]['balance']:
 
-                self.wallets[contract['accessor']]['balance'] -= contract['gas']
+                self.wallets[contract['accessor']]['balance'] -= contract['gas'] # Nothing is certain but death and GAS CHARGES
+                
                 #namespace is used to collect the output dictionary from the executed code
                 namespace = {'contract_id': contract_id, 'contract': contract}
+
                 globalsParameter = {'__builtins__' : None, 'Blockchain' : Blockchain, 'blockchain': blockchain, 'import': None, 'from': None, 
                 'reversed': reversed, 'range': range, 'len': len}
+
                 #runs the code of the contract
                 exec(contract['contract_code'], globalsParameter, namespace)
+
                  # passes states into the block
                 contract['states'] = namespace['output'] # updates contract state
-                print(contract['states'])
                 contract['states_hash'] = self.hash_contract_states(contract, list(contract['states'].values())) # hashes all of the calculated states and adds the hash to the contract
                 contract['data'] = namespace['data']
                 self.contracts[contract_id]['states'] = namespace['output'] # updates contract state
                 self.contracts[contract_id]['data'] = namespace['data']
+
                 #deletes the code from the contract afterwards in order to clean up the blocks
                 del contract['contract_code']
                 processed_contracts[contract_id] = contract 
